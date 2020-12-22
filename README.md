@@ -5,6 +5,16 @@ Playstaitation123 utilizes Docker to run Play Station 1/2/3 emulators. The plays
 Playstation123 has preliminarily built the Playstation Docker images onto DockerHub. So, one can play and enjoy Play Station Emulators without any in-depth knowledge. What users need is to love Play Station Games and to run Docker.
 
 
+# Usage
+
+         $ ./playstation123 [command]           
+                      
+                        build:    Build image           
+                        1:        Run PS1           
+                        2:        Run PS2           
+                        3:        Run PS3         
+
+
 
 # Play Station Emulatros utilized by Playstation123
 
