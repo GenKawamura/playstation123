@@ -37,7 +37,7 @@ run_playstation(){
     [ $ps_ver -eq 1 ] && echo "Stating Play Station 1 ..." && local playstation_image=$PS1_IMAGE
     [ $ps_ver -eq 2 ] && echo "Stating Play Station 2 ..." && local playstation_image=$PS2_IMAGE
     [ $ps_ver -eq 3 ] && echo "Stating Play Station 3 ..." && local playstation_image=$PS3_IMAGE
-    [ ! -e ps$ps_ver ] && mkdir -v ps$ps_ver/bios ps$ps_ver/data ps$ps_ver/plugins ps$ps_ver/games
+    [ ! -e ps$ps_ver ] && mkdir -pv ps$ps_ver/bios ps$ps_ver/data ps$ps_ver/plugins ps$ps_ver/games
 	
     docker run -it --rm \
            --privileged \
