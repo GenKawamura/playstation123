@@ -2,7 +2,7 @@
 
 Playstaitation123 utilizes Docker to run Play Station 1/2/3 emulators. The playstation123 is a straightforward command line to allows you to play PS 1/2/3 games on your PC without suffering from many complicated configurations of the emulators. 
 
-Playstation123 has preliminarily built the Playstation Docker images onto DockerHub. So, one can play and enjoy Play Station Emulators without any in-depth knowledge. What users need is running Docker.
+Playstation123 has preliminarily built the Playstation Docker images onto DockerHub. So, one can play and enjoy Play Station Emulators without any in-depth knowledge. What users need is to love Play Station Games and to run Docker.
 
 
 
