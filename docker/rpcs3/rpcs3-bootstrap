@@ -1,0 +1,51 @@
+#!/bin/sh
+
+try_fetch_bios() {
+    # abort if /bios contains any *.bin files
+    if [ "$(ls /bios/*.bin 2>/dev/null | wc -l)" != "0" ]; then
+        return
+    fi
+
+    echo "[WARN] No BIOS files found in /bios" >&2
+
+    # abort if not explicitly told to fetch bios files
+    if [ -z "${BIOS_ZIP:-}" ]; then
+        return
+    fi
+
+    echo "[WARN] BIOS files will be downloaded from $BIOS_ZIP" >&2
+    echo "[WARN] Sleeping for 5 seconds, press CTRL+C now to abort ..." >&2
+    sleep 5
+
+    wget -qO- "$BIOS_ZIP" > /tmp/ps_bios.zip
+
+    # verify checksum
+    if [ ! -z "${BIOS_CHECKSUM:-}" ]; then
+        checksum=$(sha256sum -b /tmp/ps_bios.zip | awk '{ print $1 }')
+
+        if [ "$checksum" != "$BIOS_CHECKSUM" ]; then
+            echo "[ERR] Checksum mismatch /tmp/ps_bios.zip $checksum" >&2
+            rm -f /tmp/ps_bios.zip 2>/dev/null
+
+            return
+        fi
+    fi
+
+    unzip -Lnq /tmp/ps_bios.zip -d /bios
+    rm -f /tmp/ps_bios.zip 2>/dev/null
+
+    echo "[WARN] BIOS files downloaded" >&2
+}
+
+# download bios files if /bios is empty and $ALLOW_BIOS_DOWNLOAD === 1
+try_fetch_bios
+
+
+# automatically use bios with the latest timestamp if not set
+bios=$(cd /bios; ls -1t *.bin 2>/dev/null | head -n1)
+[ -z "$bios" ] && echo "[ERR] RPCS3 will not function without a BIOS" >&2
+
+
+# start ePSXe
+export LD_LIBRARY_PATH=/usr/games
+exec "$(which rpcs3)" "$@"

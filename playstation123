@@ -1,0 +1,87 @@
+#!/bin/bash
+
+GAME_ISO_DIR=
+PS1_IMAGE=gen6scp/epsxe
+PS2_IMAGE=gen6scp/pcsx2
+PS3_IMAGE=gen6scp/rpcs3
+
+
+cd $(dirname $0)
+
+usage="$0 [command]
+
+  build:    Build image
+  1:        Run PS1
+  2:        Run PS2
+  3:        Run PS3
+
+"
+
+[ $# -eq 0 ] && echo "$usage" && exit 0
+
+
+
+# detect gpu devices to pass through
+GPU_DEVICES=$( \
+    echo "$( \
+        find /dev -maxdepth 1 -regextype posix-extended -iregex '.+/nvidia([0-9]|ctl|-modeset)' \
+            | grep --color=never '.' \
+          || echo '/dev/dri'\
+      )" \
+      | sed -E "s/^/--device /" \
+  )
+
+
+run_playstation(){
+    local ps_ver=$1
+    [ $ps_ver -eq 1 ] && echo "Stating Play Station 1 ..." && local playstation_image=$PS1_IMAGE
+    [ $ps_ver -eq 2 ] && echo "Stating Play Station 2 ..." && local playstation_image=$PS2_IMAGE
+    [ $ps_ver -eq 3 ] && echo "Stating Play Station 3 ..." && local playstation_image=$PS3_IMAGE  
+	
+    docker run -it --rm \
+           --privileged \
+           --cap-add NET_ADMIN \
+           --device /dev/fuse \
+	   --device /dev/input \
+	   --device /dev/snd \
+	   $GPU_DEVICES \
+	   -v $HOME/usr/game/ps$ps_ver:/games:ro \
+	   -v $PWD/ps$ps_ver/data:/data \
+	   -v $PWD/ps$ps_ver/bios:/bios \
+	   -v $PWD/ps$ps_ver/plugins:/plugins \
+	   -e BIOS_ZIP=${BIOS_ZIP:-} \
+	   -e BIOS_CHECKSUM=${BIOS_CHECKSUM:-} \
+	   -e PUID=$(id -u) \
+	   -e PGID=$(id -g) \
+	   -e DISPLAY=unix$DISPLAY \
+	   -e LANG=${LANG:-en_US.UTF-8} \
+	   -e TZ=UTC \
+	   -v /tmp/.X11-unix:/tmp/.X11-unix:ro \
+	   -v /etc/machine-id:/etc/machine-id:ro \
+	   -v $HOME/.config/pulse:/home/ubuntu/.config/pulse:ro \
+	   -v /run/user/$(id -u)/pulse:/run/user/$(id -u)/pulse:ro \
+	   -v /run/udev/data:/run/udev/data:ro \
+	   -v /etc/localtime:/etc/localtime:ro \
+	   $DEBUG_OPTION \
+	   $playstation_image $2
+}
+
+
+## Main
+case $1 in
+    build)
+	cd docker
+	make build
+	;;
+    1|2|3)
+	run_playstation $1
+	;;
+    debug)
+	shift
+	DEBUG_OPTION="-e PUID=0"
+	run_playstation $1 bash
+	;;	
+    *)
+	echo "$usage"
+	;;
+esac

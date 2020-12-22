@@ -1,0 +1,309 @@
+#!/bin/bash
+
+log() {
+    local severity=${2:-}
+    local prefix=
+    local color=
+    local exitCode=${3:-}
+
+    # detect severity based on input string, this is not an accurate way to
+    # determine the real severity of the input message but can be useful when
+    # viewing the output on the terminal due to color highlighting
+    if [[ -z "$severity" ]] && [[ ! -z "${1:-}" ]]; then
+        if echo "$1" \
+                | grep -E '^[^#;]' \
+                | grep -qEi "fatal|crit|emerg|error|fail|invalid|illegal|can(no|')?t|impossible|abort"; then
+            severity='ERROR'
+        elif echo "$1" \
+                | grep -E '^[^#;]' \
+                | grep -qEi 'warn'; then
+            severity='WARN'
+        elif echo "$1" \
+                | grep -E '^[^#;]' \
+                | grep -qEi 'success|complete|(add|creat|updat|delet|sav|install|fetch|remove|purg)(ing|ed)|exec'; then
+            severity='INFO'
+        fi
+    fi
+
+    case "$severity" in
+        INFO)
+            prefix='INFO:'
+            color='\033[34m'
+        ;;
+        WARN)
+            prefix='WARN:'
+            color='\033[33m'
+        ;;
+        ERROR)
+            prefix='ERROR:'
+            color='\033[31m'
+        ;;
+        FATAL)
+            prefix='FATAL:'
+            color='\033[41;39m'
+
+            if [[ -z "${exitCode:-}" ]] || [[ "${exitCode:-}" == "0" ]]; then
+                exitCode=255
+            fi
+        ;;
+        DEBUG | *)
+            prefix='DEBUG:'
+            color=''
+    esac
+
+    if [ -z "${HOSTNAME:-}" ]; then
+        HOSTNAME=$(hostname 2>/dev/null || echo 'local')
+    fi
+
+    # print from argument
+    if [ ! -z "${1:-}" ]; then
+        # set terminal color
+        echo -ne "$color" >&2
+
+        # print the message
+        date=$(date +'%Y-%d-%m %H:%M:%S')
+        message="[$date] $HOSTNAME.$prefix $(echo "${1:-}" | sed -E 's/\033[[^m]+m//g')"
+
+        echo "$message" | tee -a build.log >&2
+
+        # reset terminal color
+        echo -ne '\033[0m' >&2
+    fi
+
+    # print from stdin
+    if [ ! -t 0 ]; then
+        while read -r line; do
+            log "$line" "${2:-}" "${3:-}"
+        done
+    fi
+
+    # exit if exit code is set
+    if [ "${exitCode:-}" != "" ]; then
+        exit "$exitCode"
+    fi
+}
+
+debug() {
+    log "${1:-}" 'DEBUG' "${2:-}"
+}
+
+info() {
+    log "${1:-}" 'INFO' "${2:-}"
+}
+
+warn() {
+    log "${1:-}" 'WARN' "${2:-}"
+}
+
+error() {
+    log "${1:-}" 'ERROR' "${2:-}"
+}
+
+fatal() {
+    log "${1:-}" 'FATAL' "${2:-}"
+}
+
+dockerBuild() {
+    versions=$(ls -1 build*.properties 2>/dev/null | sort -V)
+
+    if [ -z "$versions" ]; then
+        createBuildProperties
+        versions=$(ls -1 build*.properties 2>/dev/null | sort -V)
+
+        if [ -z "$versions" ]; then
+            fatal 'no build.properties file(s)'
+        fi
+    else
+        debug 'using existing build.properties file(s)'
+    fi
+
+    setEnvironment
+
+    local latest=$(echo "$versions" | tail -n1)
+    local isLatest
+
+    for properties in $versions; do
+        if [ "$properties" = "$latest" ]; then
+            isLatest=1
+        else
+            isLatest=0
+        fi
+        setEnvironment "$properties"
+
+        local args=$(getBuildArgs "$properties")
+        local tags=$(getBuildTags "$isLatest")
+        local cacheFrom="${IMAGE}:${LABEL_VERSION}"
+
+        # ignore errors on pull, the image may not have been pushed if it's new
+        if ! docker pull "$cacheFrom" 2>&1 | debug; then
+            cacheFrom="${IMAGE}:latest"
+            if ! docker pull "$cacheFrom" 2>&1 | debug; then
+                cacheFrom=
+            fi
+        fi
+        if [ ! -z "$cacheFrom" ]; then
+            cacheFrom="--cache-from $cacheFrom"
+        fi
+
+        command="$(cat <<EOF
+docker build \
+    $cacheFrom \
+    $args \
+    --build-arg "LABEL_NAME=$NAME" \
+    --build-arg "LABEL_USAGE=https://$VCS_HOST/$VENDOR/$VCS_NAME/tree/master/$NAME" \
+    --build-arg "LABEL_VENDOR=$VENDOR" \
+    --build-arg "LABEL_VCS_URL=$VCS_URL" \
+    --build-arg "LABEL_VCS_REF=$VCS_REF" \
+    $tags \
+    "$DOCKER_BUILD_CONTEXT" \
+    -f "$DOCKER_FILE_PATH"
+EOF
+  )"
+
+        debug "Build Command: $command"
+        eval $command 2>&1 | log
+        exitCode=${PIPESTATUS[0]}
+
+        if [ ${exitCode} -ne 0 ]; then
+            fatal 'build error' ${exitCode}
+        fi
+    done
+}
+
+dockerPush() {
+    local versions=$(ls -1 build*.properties | sort -V)
+    local latest=$(echo "$versions" | tail -n1)
+    local version
+
+    for properties in $versions; do
+        setEnvironment "$properties"
+        docker push "$IMAGE:$LABEL_VERSION"
+        if [ "${TAG_MAJOR:-false}" = "true" ]; then
+            docker push "$IMAGE:$(echo "$LABEL_VERSION" | sed -E 's/^([^.]+).*/\1/')"
+        fi
+        if [ "${TAG_MINOR:-false}" = "true" ]; then
+            docker push "$IMAGE:$(echo "$LABEL_VERSION" | sed -E 's/^([^.]+\.[^.]+).*/\1/')"
+        fi
+        if [ "$properties" = "$latest" ]; then
+            docker push "$IMAGE:latest"
+        fi
+    done
+
+    updateDescription
+}
+
+updateDescription() {
+    if [ ! -f README.md ]; then
+        debug 'skipping description update no README.md'
+
+        return
+    fi
+
+    debug 'updating README.md'
+
+    if [ -z "${DOCKER_HUB_TOKEN:-}" ]; then
+        error 'DOCKER_HUB_TOKEN is not set'
+
+        return
+    fi
+
+    setEnvironment
+
+    # send the api request to update the description
+    echo -n '{"full_description": '"$(jq -Rs . README.md)"'}' \
+        | curl -sSL "https://hub.docker.com/v2/repositories/$VENDOR/$NAME/" \
+            -d @- -X PATCH \
+            -H "Content-Type: application/json" \
+            -H "Authorization: JWT ${DOCKER_HUB_TOKEN}" 2>&1 \
+        | sed -E 's/JWT .+/JWT **redacted**/' \
+        | debug
+}
+
+setEnvironment() {
+    # registry defaults
+    REGISTRY_HOST=${REGISTRY_HOST:-docker.io}
+    VENDOR=${VENDOR:-$(whoami)}
+
+    # image defaults
+    NAME=${NAME:-$(basename "$(pwd)")}
+    IMAGE=${IMAGE:-$REGISTRY_HOST/$VENDOR/$NAME}
+
+    # dockerfile defaults
+    DOCKER_BUILD_CONTEXT=${DOCKER_BUILD_CONTEXT:-.}
+    DOCKER_FILE_PATH=${DOCKER_FILE_PATH:-Dockerfile}
+
+    # vcs defaults
+    #VCS_NAME=${VCS_NAME:-$(basename "$(dirname "${BASH_SOURCE[0]}")")}
+    VCS_HOST=${VCS_HOST:-github.com}
+    VCS_URL=${VCS_URL:-https://$VCS_HOST/$VENDOR/$VCS_NAME}
+    VCS_REF=${VCS_REF:-$(getVcsRef)}
+
+    setVersion "${1:-}"
+}
+
+setVersion() {
+    local properties=${1:-build.properties}
+
+    if [ -f "$properties" ]; then
+        LABEL_VERSION=$(sed -nE 's/^LABEL_VERSION=(.+)/\1/p' "$properties" | sed -E 's/"//g' | sed -E "s/'//g")
+    fi
+}
+
+getBuildArgs() {
+    local properties=${1:-build.properties} && . "$properties"
+
+    if [ -f "$properties" ]; then
+        grep . "$properties" | sed -E 's/(.+)/--build-arg \1/' | tr $'\n' ' '
+    fi
+}
+
+getBuildTags() {
+    echo " -t ${IMAGE}:${LABEL_VERSION}"
+
+    if [ "${TAG_MAJOR:-false}" = "true" ]; then
+        local version=$(echo "$LABEL_VERSION" | sed -E 's/^([^.]+).*/\1/')
+
+        echo " -t ${IMAGE}:${version}"
+    fi
+
+    if [ "${TAG_MINOR:-false}" = "true" ]; then
+        local version=$(echo "$LABEL_VERSION" | sed -E 's/^([^.]+\.[^.]+).*/\1/')
+
+        echo " -t ${IMAGE}:${version}"
+    fi
+
+    if [ "${1:-0}" = "1" ]; then
+        echo " -t ${IMAGE}:latest"
+    fi
+}
+
+getVcsRef() {
+    local exclude=
+
+    debug 'determining git ref ...'
+
+    if [ -f .dockerignore ]; then
+        exclude=$(cat .dockerignore | sed -E 's/(.+)/":(exclude)\1"/')
+        exclude=$exclude' ":(exclude).dockerignore"'
+
+        debug "git log exclude: $(echo "$exclude" | tr $'\n' ' ')"
+    else
+        debug 'skipping exclusions: no .dockerignore'
+    fi
+
+    local ref=$(eval git log --format=%h $exclude . | head -n1)
+
+    debug "git ref: $ref"
+
+    echo "$ref"
+}
+
+createBuildProperties() {
+    if [ -f configure ]; then
+        debug 'running ./configure ...'
+
+        ./configure 2>&1 | log
+    else
+        fatal 'file not found: ./configure'
+    fi
+}
