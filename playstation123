@@ -36,7 +36,8 @@ run_playstation(){
     local ps_ver=$1
     [ $ps_ver -eq 1 ] && echo "Stating Play Station 1 ..." && local playstation_image=$PS1_IMAGE
     [ $ps_ver -eq 2 ] && echo "Stating Play Station 2 ..." && local playstation_image=$PS2_IMAGE
-    [ $ps_ver -eq 3 ] && echo "Stating Play Station 3 ..." && local playstation_image=$PS3_IMAGE  
+    [ $ps_ver -eq 3 ] && echo "Stating Play Station 3 ..." && local playstation_image=$PS3_IMAGE
+    [ ! -e ps$ps_ver ] && mkdir -v ps$ps_ver/bios ps$ps_ver/data ps$ps_ver/plugins ps$ps_ver/games
 	
     docker run -it --rm \
            --privileged \
@@ -45,7 +46,7 @@ run_playstation(){
 	   --device /dev/input \
 	   --device /dev/snd \
 	   $GPU_DEVICES \
-	   -v $HOME/usr/game/ps$ps_ver:/games:ro \
+	   -v $PWD/ps$ps_ver/games:/games:ro \
 	   -v $PWD/ps$ps_ver/data:/data \
 	   -v $PWD/ps$ps_ver/bios:/bios \
 	   -v $PWD/ps$ps_ver/plugins:/plugins \
