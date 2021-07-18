@@ -1,5 +1,5 @@
 dockerfiles
-docker/epsxe/build.log
+docker/*/build.log
 ps?/bios/*
 ps?/data/*
 ps?/plugins/*
