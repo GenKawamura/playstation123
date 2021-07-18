@@ -1,6 +1,6 @@
 # Playstation123
 
-The playstation123 command utilizes Docker to run PlayStation 1/2/3 emulators. The playstation123 is a straightforward command line to allows you to play PS 1/2/3 games on your PC without suffering from many complicated configurations of the emulators. 
+The playstation123 command utilizes Docker to run PlayStation 1/2/3 emulators. The playstation123 is a straightforward command line to allows you to play PS 1/2/3 games on your PC without suffering from many complicated configurations and dependencies of the emulators. 
 
 The playstation123 has preliminarily built the PlayStation Docker images onto DockerHub. So, one can play and enjoy PlayStation Emulators without any in-depth knowledge. What users need is to love PlayStation Games and to run Docker.
 
@@ -33,4 +33,6 @@ The playstation123 has preliminarily built the PlayStation Docker images onto Do
 * [pcsx2-x11](https://hub.docker.com/r/andrewmackrodt/pcsx2-x11)
 
 * [DockerHub and Dockerfiles](https://github.com/andrewmackrodt/dockerfiles)
+
+* [PlayStation 3 Firmware](https://www.psx-place.com/threads/4-83-cfw-homebrew-apps-plugins-tools-updated-for-4-83.20957/)
 

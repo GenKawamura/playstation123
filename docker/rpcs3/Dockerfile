@@ -5,6 +5,7 @@ WORKDIR /root
 
 ARG DEBIAN_FRONTEND=noninteractive
 
+ARG BUILD_VERSION
 ARG LABEL_VERSION
 
 # Install tools
@@ -24,7 +25,7 @@ RUN apt-get update -qq \
 # install dependencies and tools
 #  Reference: https://linuxconfig.org/how-to-install-rpcs3-emulator-and-play-ps3-games-on-linux
 # download RPCS3
-RUN cd /usr/games && wget -q https://github.com/RPCS3/rpcs3-binaries-linux/releases/download/build-6357b9a04f46682e5fcdfb60aabe81ee97db48e0/${LABEL_VERSION}.AppImage \
+RUN cd /usr/games && wget -q https://github.com/RPCS3/rpcs3-binaries-linux/releases/download/${BUILD_VERSION}/${LABEL_VERSION}.AppImage \
     && chmod +x ${LABEL_VERSION}.AppImage \
     && ln -s /usr/games/${LABEL_VERSION}.AppImage /usr/local/bin/rpcs3
 
